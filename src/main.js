@@ -6,6 +6,200 @@ const PLAYER_SPEED = 300;
 const GAME_WIDTH = 800;
 const GAME_HEIGHT = 600;
 
+// ==================
+// AUDIO SYSTEM
+// ==================
+const AudioManager = {
+    context: null,
+    muted: false,
+    musicGain: null,
+    sfxGain: null,
+    currentMusic: null,
+
+    init() {
+        this.context = new (window.AudioContext || window.webkitAudioContext)();
+
+        // Master gains for music and SFX
+        this.musicGain = this.context.createGain();
+        this.musicGain.gain.value = 0.3;
+        this.musicGain.connect(this.context.destination);
+
+        this.sfxGain = this.context.createGain();
+        this.sfxGain.gain.value = 0.5;
+        this.sfxGain.connect(this.context.destination);
+    },
+
+    resume() {
+        if (this.context && this.context.state === 'suspended') {
+            this.context.resume();
+        }
+    },
+
+    toggleMute() {
+        this.muted = !this.muted;
+        if (this.muted) {
+            this.musicGain.gain.value = 0;
+            this.sfxGain.gain.value = 0;
+        } else {
+            this.musicGain.gain.value = 0.3;
+            this.sfxGain.gain.value = 0.5;
+        }
+        return this.muted;
+    },
+
+    // Play a synthesized beep/tone
+    playTone(frequency, duration, type = 'square', gainValue = 0.3) {
+        if (!this.context) this.init();
+        this.resume();
+
+        const oscillator = this.context.createOscillator();
+        const gainNode = this.context.createGain();
+
+        oscillator.type = type;
+        oscillator.frequency.setValueAtTime(frequency, this.context.currentTime);
+
+        gainNode.gain.setValueAtTime(gainValue, this.context.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, this.context.currentTime + duration);
+
+        oscillator.connect(gainNode);
+        gainNode.connect(this.sfxGain);
+
+        oscillator.start(this.context.currentTime);
+        oscillator.stop(this.context.currentTime + duration);
+    },
+
+    // Sound effects
+    playFlagPickup() {
+        this.playTone(523, 0.1, 'square', 0.3);  // C5
+        setTimeout(() => this.playTone(659, 0.1, 'square', 0.3), 100);  // E5
+        setTimeout(() => this.playTone(784, 0.15, 'square', 0.3), 200);  // G5
+    },
+
+    playFlagCapture() {
+        // Victory arpeggio
+        this.playTone(523, 0.15, 'square', 0.4);  // C5
+        setTimeout(() => this.playTone(659, 0.15, 'square', 0.4), 100);  // E5
+        setTimeout(() => this.playTone(784, 0.15, 'square', 0.4), 200);  // G5
+        setTimeout(() => this.playTone(1047, 0.3, 'square', 0.4), 300);  // C6
+    },
+
+    playPlayerTagged() {
+        // Descending sad sound
+        this.playTone(400, 0.15, 'sawtooth', 0.3);
+        setTimeout(() => this.playTone(300, 0.15, 'sawtooth', 0.3), 100);
+        setTimeout(() => this.playTone(200, 0.2, 'sawtooth', 0.3), 200);
+    },
+
+    playEnemyTagged() {
+        // Quick punch sound
+        this.playTone(150, 0.1, 'square', 0.4);
+        setTimeout(() => this.playTone(200, 0.1, 'triangle', 0.3), 50);
+    },
+
+    playButtonClick() {
+        this.playTone(440, 0.05, 'square', 0.2);
+    },
+
+    playVictory() {
+        // Victory fanfare
+        const notes = [523, 523, 523, 659, 784, 659, 784, 1047];
+        const durations = [0.15, 0.15, 0.15, 0.15, 0.3, 0.15, 0.15, 0.5];
+        let time = 0;
+        notes.forEach((note, i) => {
+            setTimeout(() => this.playTone(note, durations[i], 'square', 0.4), time);
+            time += durations[i] * 600;
+        });
+    },
+
+    playDefeat() {
+        // Sad trombone
+        this.playTone(392, 0.3, 'sawtooth', 0.3);  // G4
+        setTimeout(() => this.playTone(370, 0.3, 'sawtooth', 0.3), 300);  // F#4
+        setTimeout(() => this.playTone(349, 0.3, 'sawtooth', 0.3), 600);  // F4
+        setTimeout(() => this.playTone(330, 0.5, 'sawtooth', 0.3), 900);  // E4
+    },
+
+    // Background music using oscillators
+    startMenuMusic() {
+        this.stopMusic();
+        if (!this.context) this.init();
+        this.resume();
+
+        const playMenuLoop = () => {
+            if (this.currentMusic !== 'menu') return;
+
+            // Simple chill melody
+            const melody = [262, 294, 330, 294, 262, 330, 392, 330];
+            let time = 0;
+            melody.forEach((freq, i) => {
+                setTimeout(() => {
+                    if (this.currentMusic === 'menu') {
+                        this.playMusicNote(freq, 0.4, 'sine');
+                    }
+                }, time);
+                time += 400;
+            });
+
+            // Loop
+            setTimeout(() => playMenuLoop(), time);
+        };
+
+        this.currentMusic = 'menu';
+        playMenuLoop();
+    },
+
+    startGameMusic() {
+        this.stopMusic();
+        if (!this.context) this.init();
+        this.resume();
+
+        const playGameLoop = () => {
+            if (this.currentMusic !== 'game') return;
+
+            // Upbeat game melody
+            const melody = [330, 392, 440, 392, 523, 440, 392, 330];
+            let time = 0;
+            melody.forEach((freq, i) => {
+                setTimeout(() => {
+                    if (this.currentMusic === 'game') {
+                        this.playMusicNote(freq, 0.2, 'triangle');
+                    }
+                }, time);
+                time += 250;
+            });
+
+            // Loop
+            setTimeout(() => playGameLoop(), time);
+        };
+
+        this.currentMusic = 'game';
+        playGameLoop();
+    },
+
+    playMusicNote(frequency, duration, type) {
+        if (!this.context) return;
+
+        const oscillator = this.context.createOscillator();
+        const gainNode = this.context.createGain();
+
+        oscillator.type = type;
+        oscillator.frequency.setValueAtTime(frequency, this.context.currentTime);
+
+        gainNode.gain.setValueAtTime(0.15, this.context.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, this.context.currentTime + duration);
+
+        oscillator.connect(gainNode);
+        gainNode.connect(this.musicGain);
+
+        oscillator.start(this.context.currentTime);
+        oscillator.stop(this.context.currentTime + duration);
+    },
+
+    stopMusic() {
+        this.currentMusic = null;
+    }
+};
+
 // Initialize the game
 kaplay({
     width: GAME_WIDTH,
@@ -18,6 +212,9 @@ kaplay({
 // MENU SCENE
 // ==================
 scene("menu", () => {
+    // Start menu music
+    AudioManager.startMenuMusic();
+
     // Title
     add([
         text("Owen's CTF", { size: 64 }),
@@ -83,13 +280,49 @@ scene("menu", () => {
         color(150, 150, 150),
     ]);
 
+    // Mute button
+    const muteBtn = add([
+        rect(50, 50),
+        pos(GAME_WIDTH - 35, 35),
+        anchor("center"),
+        color(80, 80, 80),
+        area(),
+        "muteBtn",
+    ]);
+
+    const muteBtnText = add([
+        text(AudioManager.muted ? "🔇" : "🔊", { size: 24 }),
+        pos(GAME_WIDTH - 35, 35),
+        anchor("center"),
+        color(255, 255, 255),
+    ]);
+
+    add([
+        text("Press M to mute", { size: 14 }),
+        pos(center().x, 540),
+        anchor("center"),
+        color(100, 100, 100),
+    ]);
+
     // Click handlers
     onClick("redBtn", () => {
+        AudioManager.playButtonClick();
         go("game", { team: "red" });
     });
 
     onClick("blueBtn", () => {
+        AudioManager.playButtonClick();
         go("game", { team: "blue" });
+    });
+
+    onClick("muteBtn", () => {
+        const muted = AudioManager.toggleMute();
+        muteBtnText.text = muted ? "🔇" : "🔊";
+    });
+
+    onKeyPress("m", () => {
+        const muted = AudioManager.toggleMute();
+        muteBtnText.text = muted ? "🔇" : "🔊";
     });
 });
 
@@ -97,6 +330,9 @@ scene("menu", () => {
 // GAME SCENE
 // ==================
 scene("game", ({ team }) => {
+    // Start game music
+    AudioManager.startGameMusic();
+
     // Game state
     let redScore = 0;
     let blueScore = 0;
@@ -283,6 +519,7 @@ scene("game", ({ team }) => {
             player.hasFlag = true;
             player.carriedFlag = flag;
             flag.hidden = true;
+            AudioManager.playFlagPickup();
             debug.log("Got the flag! Bring it back to your base!");
         }
     });
@@ -303,14 +540,15 @@ scene("game", ({ team }) => {
             player.hasFlag = false;
             player.carriedFlag = null;
 
+            AudioManager.playFlagCapture();
             updateScore();
             debug.log("SCORE! Flag captured!");
 
             // Check for win
             if (redScore >= 3) {
-                go("gameover", { winner: "red" });
+                go("gameover", { winner: "red", playerTeam: playerTeam });
             } else if (blueScore >= 3) {
-                go("gameover", { winner: "blue" });
+                go("gameover", { winner: "blue", playerTeam: playerTeam });
             }
         }
     });
@@ -320,6 +558,7 @@ scene("game", ({ team }) => {
         const playerInEnemyTerritory = isInEnemyTerritory(player);
 
         if (playerInEnemyTerritory) {
+            AudioManager.playPlayerTagged();
             debug.log("Tagged! Respawning...");
 
             if (player.hasFlag && player.carriedFlag) {
@@ -335,6 +574,7 @@ scene("game", ({ team }) => {
                 player.pos = vec2(GAME_WIDTH - 100, GAME_HEIGHT / 2);
             }
         } else {
+            AudioManager.playEnemyTagged();
             debug.log("Enemy tagged! They respawn.");
             enemy.pos = vec2(enemy.startX, enemy.pos.y);
         }
@@ -482,13 +722,53 @@ scene("game", ({ team }) => {
         });
     }
 
+    // Mute button (top right corner)
+    const muteBtn = add([
+        rect(40, 40),
+        pos(GAME_WIDTH - 30, 30),
+        anchor("center"),
+        color(60, 60, 60),
+        opacity(0.8),
+        area(),
+        fixed(),
+        "muteBtn",
+    ]);
+
+    const muteBtnText = add([
+        text(AudioManager.muted ? "🔇" : "🔊", { size: 20 }),
+        pos(GAME_WIDTH - 30, 30),
+        anchor("center"),
+        color(255, 255, 255),
+        fixed(),
+    ]);
+
+    onClick("muteBtn", () => {
+        const muted = AudioManager.toggleMute();
+        muteBtnText.text = muted ? "🔇" : "🔊";
+    });
+
+    onKeyPress("m", () => {
+        const muted = AudioManager.toggleMute();
+        muteBtnText.text = muted ? "🔇" : "🔊";
+    });
+
     debug.log("Game started! Team: " + playerTeam);
 });
 
 // ==================
 // GAME OVER SCENE
 // ==================
-scene("gameover", ({ winner }) => {
+scene("gameover", ({ winner, playerTeam }) => {
+    // Stop game music and play appropriate sound
+    AudioManager.stopMusic();
+
+    const playerWon = winner === playerTeam;
+    if (playerWon) {
+        AudioManager.playVictory();
+    } else {
+        AudioManager.playDefeat();
+    }
+
     const winnerColor = winner === "red" ? [255, 0, 0] : [0, 0, 255];
 
     add([
@@ -498,14 +778,50 @@ scene("gameover", ({ winner }) => {
         color(...winnerColor),
     ]);
 
+    // Show personalized message
     add([
-        text("Click to play again", { size: 24 }),
-        pos(center().x, 350),
+        text(playerWon ? "Congratulations!" : "Better luck next time!", { size: 28 }),
+        pos(center().x, 280),
         anchor("center"),
         color(200, 200, 200),
     ]);
 
+    add([
+        text("Click to play again", { size: 24 }),
+        pos(center().x, 380),
+        anchor("center"),
+        color(150, 150, 150),
+    ]);
+
+    // Mute button
+    const muteBtn = add([
+        rect(50, 50),
+        pos(GAME_WIDTH - 35, 35),
+        anchor("center"),
+        color(80, 80, 80),
+        area(),
+        "muteBtn",
+    ]);
+
+    const muteBtnText = add([
+        text(AudioManager.muted ? "🔇" : "🔊", { size: 24 }),
+        pos(GAME_WIDTH - 35, 35),
+        anchor("center"),
+        color(255, 255, 255),
+    ]);
+
+    onClick("muteBtn", () => {
+        const muted = AudioManager.toggleMute();
+        muteBtnText.text = muted ? "🔇" : "🔊";
+    });
+
+    onKeyPress("m", () => {
+        const muted = AudioManager.toggleMute();
+        muteBtnText.text = muted ? "🔇" : "🔊";
+    });
+
     onClick(() => {
+        AudioManager.playButtonClick();
         go("menu");
     });
 
